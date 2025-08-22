@@ -9,6 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/mayurrawte/gotrust"
+	echoAdapter "github.com/mayurrawte/gotrust/adapters/echo"
 )
 
 // InMemoryUserStore implements UserStore interface for demonstration
@@ -104,6 +105,7 @@ func main() {
 
 	// Create auth service
 	authService := gotrust.NewAuthService(config, userStore, sessionStore)
+	handlers := gotrust.NewGenericAuthHandlers(authService, config)
 
 	// Setup Echo server
 	e := echo.New()
@@ -113,9 +115,8 @@ func main() {
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORS())
 
-	// Register auth routes
-	handlers := gotrust.NewAuthHandlers(authService, config)
-	handlers.RegisterRoutes(e, "/auth")
+	// Register auth routes using Echo adapter
+	echoAdapter.RegisterRoutes(e, "/auth", handlers)
 
 	// Public routes
 	e.GET("/", func(c echo.Context) error {
@@ -127,11 +128,11 @@ func main() {
 
 	// Protected routes
 	api := e.Group("/api")
-	api.Use(authService.AuthMiddleware())
+	api.Use(echoAdapter.WrapMiddleware(handlers.AuthMiddleware()))
 
 	api.GET("/profile", func(c echo.Context) error {
-		userID, _ := gotrust.GetUserFromContext(c)
-		email := c.Get("user_email").(string)
+		userID, _ := c.Get("user_id").(string)
+		email, _ := c.Get("user_email").(string)
 		
 		return c.JSON(200, map[string]interface{}{
 			"user_id": userID,
@@ -141,7 +142,7 @@ func main() {
 	})
 
 	api.GET("/dashboard", func(c echo.Context) error {
-		userID, _ := gotrust.GetUserFromContext(c)
+		userID, _ := c.Get("user_id").(string)
 		return c.JSON(200, map[string]interface{}{
 			"user_id": userID,
 			"data": map[string]interface{}{
@@ -156,7 +157,7 @@ func main() {
 
 	// Optional auth routes (works for both authenticated and anonymous)
 	public := e.Group("/public")
-	public.Use(authService.OptionalAuthMiddleware())
+	public.Use(echoAdapter.WrapMiddleware(handlers.OptionalAuthMiddleware()))
 
 	public.GET("/content", func(c echo.Context) error {
 		userID, _ := c.Get("user_id").(string)

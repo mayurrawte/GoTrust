@@ -1,6 +1,6 @@
 # GoTrust 🔐
 
-A pragmatic authentication library for Go applications. Built from real-world experience to handle the auth layer so you can focus on your business logic.
+**Framework-agnostic** authentication library for Go. Works with Echo, Gin, Fiber, or standard net/http. One auth library, any framework.
 
 ## Why GoTrust?
 
@@ -13,39 +13,97 @@ After building authentication for multiple production applications, I found myse
 - 🎫 JWT tokens with refresh token rotation
 - 💾 Session management via Redis or in-memory storage
 - 🗄️ Database-agnostic through interfaces
-- ⚡ Echo framework middleware (more frameworks coming)
+- ⚡ **Framework-agnostic** - works with any Go web framework
 - 🛡️ Production-ready security defaults
+- 📦 Modular adapters - only import what you need
 
 ## Installation
 
 ```bash
+# Core library (required)
 go get github.com/mayurrawte/gotrust
+
+# Then install ONLY the adapter for your framework:
+go get github.com/mayurrawte/gotrust/adapters/echo   # For Echo
+go get github.com/mayurrawte/gotrust/adapters/gin    # For Gin  
+go get github.com/mayurrawte/gotrust/adapters/fiber  # For Fiber
+go get github.com/mayurrawte/gotrust/adapters/stdlib # For net/http
 ```
+
+**No bloat!** If you use Echo, you won't get Gin dependencies. Each adapter is isolated.
 
 ## Basic Usage
 
+### With Echo Framework
 ```go
-// 1. Implement UserStore for your database
-userStore := NewPostgresUserStore(db)  // or MongoDB, MySQL, etc.
-
-// 2. Create auth service
-authService := gotrust.NewAuthService(
-    gotrust.NewConfig(),
-    userStore,
-    gotrust.NewMemorySessionStore(),
+import (
+    "github.com/labstack/echo/v4"
+    "github.com/mayurrawte/gotrust"
+    echoAdapter "github.com/mayurrawte/gotrust/adapters/echo"
 )
 
-// 3. Add to your Echo app
-e := echo.New()
-handlers := gotrust.NewAuthHandlers(authService, config)
-handlers.RegisterRoutes(e, "/auth")
+// Setup
+config := gotrust.NewConfig()
+userStore := NewPostgresUserStore(db)  
+authService := gotrust.NewAuthService(config, userStore, gotrust.NewMemorySessionStore())
+handlers := gotrust.NewGenericAuthHandlers(authService, config)
 
-// 4. Protect routes
+// Register routes
+e := echo.New()
+echoAdapter.RegisterRoutes(e, "/auth", handlers)
+
+// Protect routes
 api := e.Group("/api")
-api.Use(authService.AuthMiddleware())
+api.Use(echoAdapter.WrapMiddleware(handlers.AuthMiddleware()))
 ```
 
-That's it! 🎉 Your app now has production-ready authentication.
+### With Gin Framework
+```go
+import (
+    "github.com/gin-gonic/gin"
+    "github.com/mayurrawte/gotrust"
+    ginAdapter "github.com/mayurrawte/gotrust/adapters/gin"
+)
+
+// Setup
+config := gotrust.NewConfig()
+userStore := NewPostgresUserStore(db)  
+authService := gotrust.NewAuthService(config, userStore, gotrust.NewMemorySessionStore())
+handlers := gotrust.NewGenericAuthHandlers(authService, config)
+
+// Register routes
+router := gin.Default()
+ginAdapter.RegisterRoutes(router, "/auth", handlers)
+
+// Protect routes
+api := router.Group("/api")
+api.Use(ginAdapter.WrapMiddleware(handlers.AuthMiddleware()))
+```
+
+### With Standard net/http
+```go
+import (
+    "net/http"
+    "github.com/mayurrawte/gotrust"
+    stdAdapter "github.com/mayurrawte/gotrust/adapters/stdlib"
+)
+
+// Setup
+config := gotrust.NewConfig()
+userStore := NewPostgresUserStore(db)  
+authService := gotrust.NewAuthService(config, userStore, gotrust.NewMemorySessionStore())
+handlers := gotrust.NewGenericAuthHandlers(authService, config)
+
+// Register routes
+mux := http.NewServeMux()
+stdAdapter.RegisterRoutes(mux, "/auth", handlers)
+
+// Protect routes with middleware
+protectedHandler := stdAdapter.AuthMiddleware(handlers)(yourHandler)
+mux.HandleFunc("/api/protected", protectedHandler)
+```
+
+That's it! 🎉 Your app now has production-ready authentication with YOUR preferred framework.
 
 ## Full Setup Guide
 
